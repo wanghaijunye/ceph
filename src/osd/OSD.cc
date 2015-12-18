@@ -3043,7 +3043,7 @@ void OSD::build_past_intervals_parallel()
 	p.old_up, up,
 	p.same_interval_since,
 	pg->info.history.last_epoch_clean,
-	cur_map, last_map,
+	cur_map.get(), last_map.get(),
 	pgid,
         recoverable.get(),
 	&pg->past_intervals,
@@ -6208,6 +6208,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction *_t = new ObjectStore::Transaction;
   ObjectStore::Transaction &t = *_t;
 
+
+  service.map_cache.dump_weak_refs();
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t last_marked_full = 0;
   epoch_t start = MAX(osdmap->get_epoch() + 1, first);
@@ -6306,7 +6308,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       MIN(m->oldest_map,
 	  service.map_cache.cached_key_lower_bound()));
     for (epoch_t e = superblock.oldest_map; e < min; ++e) {
-      dout(20) << " removing old osdmap epoch " << e << dendl;
+      dout(5) << " removing old osdmap epoch " << e << dendl;
       t.remove(META_COLL, get_osdmap_pobject_name(e));
       t.remove(META_COLL, get_inc_osdmap_pobject_name(e));
       superblock.oldest_map = e+1;
