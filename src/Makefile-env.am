@@ -43,11 +43,6 @@ export VERBOSE = true
 export PYTHONPATH=$(top_srcdir)/src/pybind
 
 # when doing a debug build, make sure to make the targets
-if WITH_DEBUG
-bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
-endif
-
-
 ##################################
 ## automake environment
 
