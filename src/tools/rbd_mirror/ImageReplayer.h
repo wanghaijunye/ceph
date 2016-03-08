@@ -61,7 +61,7 @@ public:
 
     BootstrapParams() {}
     BootstrapParams(const std::string &local_pool_name,
-		    const std::string local_image_name) :
+		    const std::string &local_image_name) :
       local_pool_name(local_pool_name),
       local_image_name(local_image_name) {}
 
