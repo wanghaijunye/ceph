@@ -3602,16 +3602,21 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   string erasure_code_profile;
   stringstream ss;
   string ruleset_name;
+  int ret;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+    ret = prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
+			   0, 0,
+			   erasure_code_profile,
+			   pg_pool_t::TYPE_REPLICATED, 0, ss);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+    ret = prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
+			   0, 0,
+			   erasure_code_profile,
+			   pg_pool_t::TYPE_REPLICATED, 0, ss);
+  if (ret) {
+    dout(10) << __func__ << ": " << ss.str() << dendl;
+  }
+  return ret;
 }
 
 int OSDMonitor::crush_rename_bucket(const string& srcname,
