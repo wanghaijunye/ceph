@@ -2667,15 +2667,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
       t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
     }
-    if (osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-      // if the SORTBITWISE flag is set, we know all OSDs are running
-      // jewel+.
-      pgid = t->base_pgid;
-    } else {
-      // legacy behavior.  pre-jewel OSDs will fail if we send a
-      // full-hash pgid value.
-      pgid = osdmap->raw_pg_to_pg(t->base_pgid);
-    }
+    pgid = osdmap->raw_pg_to_pg(t->base_pgid);
   } else {
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
 					   pgid);

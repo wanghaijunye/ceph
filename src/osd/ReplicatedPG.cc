@@ -1627,13 +1627,38 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  hobject_t head(m->get_oid(), m->get_object_locator().key,
+		 CEPH_NOSNAP, m->get_pg().ps(),
+		 info.pgid.pool(), m->get_object_locator().nspace);
+
   // object name too long?
-  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
-                              osd->osd->store->get_max_object_name_length());
-  if (m->get_oid().name.size() > max_name_len) {
-    dout(4) << "do_op '" << m->get_oid().name << "' is longer than "
-            << max_name_len << " bytes" << dendl;
+  if (m->get_oid().name.size() > g_conf->osd_max_object_name_len) {
+    dout(4) << "do_op name is longer than "
+            << g_conf->osd_max_object_name_len
+	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+  if (m->get_object_locator().key.size() > g_conf->osd_max_object_name_len) {
+    dout(4) << "do_op locator is longer than "
+            << g_conf->osd_max_object_name_len
+	    << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+  if (m->get_object_locator().nspace.size() >
+      g_conf->osd_max_object_namespace_len) {
+    dout(4) << "do_op namespace is longer than "
+            << g_conf->osd_max_object_namespace_len
+	    << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+
+  if (int r = osd->store->validate_hobject_key(head)) {
+    dout(4) << "do_op object " << head << " invalid for backing store: "
+	    << r << dendl;
+    osd->reply_op_error(op, r);
     return;
   }
 
@@ -1701,11 +1726,6 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
-
-  hobject_t head(m->get_oid(), m->get_object_locator().key,
-		 CEPH_NOSNAP, m->get_pg().ps(),
-		 info.pgid.pool(), m->get_object_locator().nspace);
-
 
   if (write_ordered &&
       scrubber.write_blocked_by_scrub(head, get_sort_bitwise())) {
@@ -6928,10 +6948,6 @@ int ReplicatedPG::fill_in_copy_get(
     return result;
   }
 
-  if ((osd_op.op.copy_get.flags & CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP) &&
-      oi.is_omap())
-      return -EOPNOTSUPP;
-
   MOSDOp *op = reinterpret_cast<MOSDOp*>(ctx->op->get_req());
   uint64_t features = op->get_features();
 
@@ -7171,12 +7187,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // it already!
     assert(cop->cursor.is_initial());
   }
-
-  uint32_t copyget_flags = 0;
-  if (!pool.info.supports_omap())
-   copyget_flags |= CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP;
-
-  op.copy_get(&cop->cursor, get_copy_chunk_size(), copyget_flags,
+  op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
 	      &cop->results.snaps, &cop->results.snap_seq,
@@ -7338,6 +7349,16 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
+
+  if (r < 0 && cop->results.started_temp_obj) {
+    dout(10) << __func__ << " deleting partial temp object "
+	     << cop->results.temp_oid << dendl;
+    ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
+    OpContextUPtr ctx = simple_opc_create(tempobc);
+    ctx->op_t->remove(cop->results.temp_oid);
+    ctx->discard_temp_oid = cop->results.temp_oid;
+    simple_opc_submit(std::move(ctx));
+  }
 
   // cancel and requeue proxy ops on this object
   if (!r) {
